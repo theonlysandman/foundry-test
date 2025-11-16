@@ -1,0 +1,54 @@
+name: App Deploy (OIDC)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "**/*.js"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/app-deploy-oidc.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AZURE_RG: yahoo-fantasy
+      WEBAPP_NAME: gm-review-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: |
+          npm ci || npm install
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Zip artifact
+        run: |
+          zip -r app.zip . -x "node_modules/*" ".git/*"
+
+      - name: Deploy to Azure (zip)
+        run: |
+          az webapp deploy \
+            --resource-group "$AZURE_RG" \
+            --name "$WEBAPP_NAME" \
+            --src-path app.zip \
+            --type zip
